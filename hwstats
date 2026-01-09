@@ -1,0 +1,43 @@
+#!/bin/bash
+
+echo "Testbed"
+
+echo
+echo "========  GPU  ========="
+if [ -n "$(which nvidia-smi)" ]; then 
+    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | \
+        awk -F ", " '{
+	    printf "%-19s: %s\n", $1, $2
+        }'
+fi
+
+echo
+echo "========  CPU  ========="
+lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
+    awk -F ":" '{
+        value = $2;
+	gsub(/^[[:space:]]+|[[:space:]]+$/, "", value);
+	printf "%-19s: %s\n", $1, value;
+    }'
+
+echo
+echo "======== Memory ========"
+cat /proc/meminfo | grep "MemTotal" | \
+    awk -F ": " '{
+        memory_size = $2;
+	gsub(/^[[:space:]]+|[[:space:]]+$/, "", memory_size);
+        printf "%-19s: %s\n", "Memory", memory_size
+    }'
+
+echo
+echo "========  Disk  ========"
+lsblk -dn -o name,size,rota,type | grep -i 'disk'  | \
+    awk '{
+        if ($3 == "0") {
+            device_type = "SSD"
+        } else {
+            device_type = "HDD"
+        }
+	device_name = "/dev/"$1
+        printf "%-19s: Size = %8s, Type = %s\n", device_name, $2, device_type
+    }'
