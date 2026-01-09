@@ -41,5 +41,5 @@ lsblk -dn -o name,size,rota,type | grep -i 'disk'  | \
             device_type = "HDD"
         }
         device_name = "/dev/"$1
-        printf "%-*s: Size = %8s, Type = %s\n", width, device_name, $2, device_type
+        printf "%-*s: Size = %6s, Type = %s\n", width, device_name, $2, device_type
     }'
