@@ -31,13 +31,26 @@ cat /proc/meminfo | grep "MemTotal" | \
 
 echo
 echo "========  Disk  ========"
-lsblk -dn -o name,size,rota,type | grep -i 'disk'  | \
+lsblk -dn -o name,size,rota,type | grep "disk" | \
     awk -v width=$WIDTH '{
+        device_name = "/dev/"$1;
+        device_size = $2;
         if ($3 == "0") {
-            device_type = "SSD"
+            device_type = "SSD";
         } else {
-            device_type = "HDD"
+            device_type = "HDD";
         }
-        device_name = "/dev/"$1
-        printf "%-*s: Size = %6s, Type = %s\n", width, device_name, $2, device_type
+
+        disk_list[NR, 0] = device_name;
+        disk_list[NR, 1] = device_size;
+        disk_list[NR, 2] = device_type;
+    }
+    END {
+        if (NR == 1) {
+            printf "%-*s: Size = %s, Type = %s\n", width, disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2];
+        } else {
+            for (i = 1; i <= NR; i++) {
+                printf "%-*s: Size = %6s, Type = %s\n", width, disk_list[i, 0], disk_list[i, 1], disk_list[i, 2];
+            }
+        }
     }'
