@@ -154,7 +154,7 @@ print_sw() {
     if [ -n "$(which make)" ]; then
         make --version | awk -v width=$WIDTH '{
             if (NR == 1) {
-                printf "%-*s: Make %s\n", width, "Make version", $0
+                printf "%-*s: %s\n", width, "Make version", $0
             }
         }'
     fi
@@ -162,7 +162,7 @@ print_sw() {
     if [ -n "$(which cmake)" ]; then
         cmake --version | awk -v width=$WIDTH '{
             if (NR == 1) {
-                printf "%-*s: %s\n", width, "CMake version", $3
+                printf "%-*s: CMake %s\n", width, "CMake version", $3
             }
         }'  
     fi
