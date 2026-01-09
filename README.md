@@ -1,9 +1,9 @@
-### hwstats
+### hsstats
 
 * Example
 
 ```shell
-$ ./hwstats 
+$ ./hsstats
 Testbed
 
 ========  GPU  =========
