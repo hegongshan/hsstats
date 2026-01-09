@@ -7,7 +7,7 @@ echo "========  GPU  ========="
 if [ -n "$(which nvidia-smi)" ]; then 
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | \
         awk -F ", " '{
-	    printf "%-19s: %s\n", $1, $2
+            printf "%-19s: %s\n", $1, $2
         }'
 fi
 
@@ -16,8 +16,8 @@ echo "========  CPU  ========="
 lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
     awk -F ":" '{
         value = $2;
-	gsub(/^[[:space:]]+|[[:space:]]+$/, "", value);
-	printf "%-19s: %s\n", $1, value;
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value);
+        printf "%-19s: %s\n", $1, value;
     }'
 
 echo
@@ -25,7 +25,7 @@ echo "======== Memory ========"
 cat /proc/meminfo | grep "MemTotal" | \
     awk -F ": " '{
         memory_size = $2;
-	gsub(/^[[:space:]]+|[[:space:]]+$/, "", memory_size);
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", memory_size);
         printf "%-19s: %s\n", "Memory", memory_size
     }'
 
@@ -38,6 +38,6 @@ lsblk -dn -o name,size,rota,type | grep -i 'disk'  | \
         } else {
             device_type = "HDD"
         }
-	device_name = "/dev/"$1
+        device_name = "/dev/"$1
         printf "%-19s: Size = %8s, Type = %s\n", device_name, $2, device_type
     }'
