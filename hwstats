@@ -71,13 +71,18 @@ fi
 
 if [ -n "$(which python3)" ]; then
     printf "%-*s: %s\n" $WIDTH "Python version" "$(python3 --version)"
-    if [ -n "$(which pip3)" ]; then
-        pip3 list | grep "torch " | \
-            awk -v width=$WIDTH '{
-                printf "%-*s: PyTorch %s\n", width, "PyTorch version", $2
-            }'
-    fi
-    cat /usr/local/cuda/version.json | grep -A 1 "CUDA SDK" | \
+fi
+
+if [ -n "$(which pip3)" ]; then
+    pip3 list | grep "torch " | \
+        awk -v width=$WIDTH '{
+            printf "%-*s: PyTorch %s\n", width, "PyTorch version", $2
+        }'
+fi
+
+cuda_version_file="/usr/local/cuda/version.json"
+if [ -e "$cuda_version_file" ]; then
+    cat $cuda_version_file | grep -A 1 "CUDA SDK" | \
         awk -v width=$WIDTH '{
             if (NR == 2) {
                 version = $3;
