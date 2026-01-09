@@ -25,10 +25,8 @@ lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
 echo
 echo "======== Memory ========"
 cat /proc/meminfo | grep "MemTotal" | \
-    awk -v width=$WIDTH  -F ": " '{
-        memory_size = $2;
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", memory_size);
-        printf "%-*s: %s\n", width, "Memory", memory_size
+    awk -v width=$WIDTH  -F ": +" '{
+        printf "%-*s: %s\n", width, "Memory", $2
     }'
 
 echo
