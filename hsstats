@@ -1,7 +1,7 @@
 #!/bin/bash
 
 WIDTH=19
-OS=$(uname)
+platform=$(uname)
 
 echo "Testbed"
 
@@ -16,7 +16,7 @@ fi
 
 echo
 echo "========  CPU  ========="
-if [ "$OS" == "Linux" ]; then
+if [ "$platform" == "Linux" ]; then
     if [ -n "$(which lscpu)" ]; then
         lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
             awk -v width=$WIDTH -F ":" '{
@@ -25,7 +25,7 @@ if [ "$OS" == "Linux" ]; then
                 printf "%-*s: %s\n", width, $1, value;
             }'
     fi
-elif [ "$OS" == "Darwin" ]; then
+elif [ "$platform" == "Darwin" ]; then
     cpu_name=$(sysctl -n machdep.cpu.brand_string)
     cpu_core=$(sysctl -n hw.physicalcpu)
     printf "%-*s: %s\n" $WIDTH "Model name" "$cpu_name"
@@ -34,42 +34,52 @@ fi
 
 echo
 echo "======== Memory ========"
-if [ "$OS" == "Linux" ]; then
+if [ "$platform" == "Linux" ]; then
     cat /proc/meminfo | grep "MemTotal" | \
         awk -v width=$WIDTH  -F ": +" '{
             printf "%-*s: %s\n", width, "Memory", $2
         }'
-elif [ "$OS" == "Darwin" ]; then
+elif [ "$platform" == "Darwin" ]; then
     memory_size=$(sysctl -n hw.memsize)
     printf "%-*s: %s B\n" $WIDTH "Memory" "$memory_size"
 fi
 
 echo
 echo "========  Disk  ========"
-if [ -n "$(which lsblk)" ]; then
-    lsblk -dn -o name,size,rota,type | grep "disk" | \
-        awk -v width=$WIDTH '{
-            device_name = "/dev/"$1;
-            device_size = $2;
-            if ($3 == "0") {
-                device_type = "SSD";
-            } else {
-                device_type = "HDD";
-            }
-
-            disk_list[NR, 0] = device_name;
-            disk_list[NR, 1] = device_size;
-            disk_list[NR, 2] = device_type;
-        }
-        END {
-            if (NR == 1) {
-                printf "%-*s: Size = %s, Type = %s\n", width, disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2];
-            } else {
-                for (i = 1; i <= NR; i++) {
-                    printf "%-*s: Size = %6s, Type = %s\n", width, disk_list[i, 0], disk_list[i, 1], disk_list[i, 2];
+if [ "$platform" == "Linux" ]; then
+    if [ -n "$(which lsblk)" ]; then
+        lsblk -dn -o name,size,rota,type | grep "disk" | \
+            awk -v width=$WIDTH '{
+                device_name = "/dev/"$1;
+                device_size = $2;
+                if ($3 == "0") {
+                    device_type = "SSD";
+                } else {
+                    device_type = "HDD";
                 }
+
+                disk_list[NR, 0] = device_name;
+                disk_list[NR, 1] = device_size;
+                disk_list[NR, 2] = device_type;
             }
-        }'
+            END {
+                if (NR == 1) {
+                    printf "%-*s: Size = %s, Type = %s\n", width, disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2];
+                } else {
+                    for (i = 1; i <= NR; i++) {
+                        printf "%-*s: Size = %6s, Type = %s\n", width, disk_list[i, 0], disk_list[i, 1], disk_list[i, 2];
+                    }
+                }
+            }'
+    fi
+elif [ "$platform" == "Darwin" ]; then
+    disk_list=$(diskutil list physical | grep "/dev" | awk '{print $1}' | xargs)
+    for disk in ${disk_list[@]}; do
+        diskutil info "$disk" | grep "Disk Size" | \
+            awk -v width=$WIDTH -v disk=$disk '{
+                printf "%-*s: Size = %s %s\n", width, disk, $3, $4
+            }'
+    done
 fi
 
 echo
