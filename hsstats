@@ -137,6 +137,35 @@ print_sw() {
                 }
             }'
     fi
+
+    if [ -n "$(which gcc)" ]; then
+        local gcc_version=
+        if [ "$PLATFORM" == "Linux" ]; then
+            gcc_version=$(gcc -dumpfullversion)
+        elif [ "$PLATFORM" == "Darwin" ]; then
+            gcc_version=$(gcc -dumpversion)
+        fi
+        if [ -n "$gcc_version" ]; then
+            echo
+            printf "%-*s: GCC %s\n" $WIDTH "GCC version" "$gcc_version"
+        fi
+    fi
+
+    if [ -n "$(which make)" ]; then
+        make --version | awk -v width=$WIDTH '{
+            if (NR == 1) {
+                printf "%-*s: Make %s\n", width, "Make version", $0
+            }
+        }'
+    fi
+
+    if [ -n "$(which cmake)" ]; then
+        cmake --version | awk -v width=$WIDTH '{
+            if (NR == 1) {
+                printf "%-*s: %s\n", width, "CMake version", $3
+            }
+        }'  
+    fi
 }
 
 start=$(date +%s)
