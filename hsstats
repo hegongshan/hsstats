@@ -1,128 +1,193 @@
 #!/bin/bash
 
 WIDTH=19
-platform=$(uname)
+PLATFORM=$(uname)
 
-echo "Testbed"
+print_help() {
+    echo "Usage:"
+    echo
+    echo "    -h, --help    Show this help message"
+    echo "    --sw          Print Software Information"
+    echo "    --hw          Print Hardware Information"
+    echo "    -n            Do not print time"
+}
 
-echo
-echo "========  GPU  ========="
-if [ -n "$(which nvidia-smi)" ]; then 
-    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | \
-        awk -v width=$WIDTH -F ", " '{
-            printf "%-*s: %s\n", width, $1, $2
-        }'
-fi
-
-echo
-echo "========  CPU  ========="
-if [ "$platform" == "Linux" ]; then
-    if [ -n "$(which lscpu)" ]; then
-        lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
-            awk -v width=$WIDTH -F ":" '{
-                value = $2;
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value);
-                printf "%-*s: %s\n", width, $1, value;
+print_hw() {
+    echo
+    echo "========  GPU  ========="
+    if [ -n "$(which nvidia-smi)" ]; then 
+        nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | \
+            awk -v width=$WIDTH -F ", " '{
+                printf "%-*s: %s\n", width, $1, $2
             }'
     fi
-elif [ "$platform" == "Darwin" ]; then
-    cpu_name=$(sysctl -n machdep.cpu.brand_string)
-    cpu_core=$(sysctl -n hw.physicalcpu)
-    printf "%-*s: %s\n" $WIDTH "Model name" "$cpu_name"
-    printf "%-*s: %s\n" $WIDTH "Core(s)" "$cpu_core"
-fi
 
-echo
-echo "======== Memory ========"
-if [ "$platform" == "Linux" ]; then
-    cat /proc/meminfo | grep "MemTotal" | \
-        awk -v width=$WIDTH  -F ": +" '{
-            printf "%-*s: %s\n", width, "Memory", $2
-        }'
-elif [ "$platform" == "Darwin" ]; then
-    memory_size=$(sysctl -n hw.memsize)
-    printf "%-*s: %s B\n" $WIDTH "Memory" "$memory_size"
-fi
+    echo
+    echo "========  CPU  ========="
+    if [ "$PLATFORM" == "Linux" ]; then
+        if [ -n "$(which lscpu)" ]; then
+            lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
+                awk -v width=$WIDTH -F ":" '{
+                    value = $2;
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", value);
+                    printf "%-*s: %s\n", width, $1, value;
+                }'
+        fi
+    elif [ "$PLATFORM" == "Darwin" ]; then
+        cpu_name=$(sysctl -n machdep.cpu.brand_string)
+        cpu_core=$(sysctl -n hw.physicalcpu)
+        printf "%-*s: %s\n" $WIDTH "Model name" "$cpu_name"
+        printf "%-*s: %s\n" $WIDTH "Core(s)" "$cpu_core"
+    fi
 
-echo
-echo "========  Disk  ========"
-if [ "$platform" == "Linux" ]; then
-    if [ -n "$(which lsblk)" ]; then
-        lsblk -dn -o name,size,rota,type | grep "disk" | \
-            awk -v width=$WIDTH '{
-                device_name = "/dev/"$1;
-                device_size = $2;
-                if ($3 == "0") {
-                    device_type = "SSD";
-                } else {
-                    device_type = "HDD";
-                }
+    echo
+    echo "======== Memory ========"
+    if [ "$PLATFORM" == "Linux" ]; then
+        cat /proc/meminfo | grep "MemTotal" | \
+            awk -v width=$WIDTH  -F ": +" '{
+                printf "%-*s: %s\n", width, "Memory", $2
+            }'
+    elif [ "$PLATFORM" == "Darwin" ]; then
+        memory_size=$(sysctl -n hw.memsize)
+        printf "%-*s: %s B\n" $WIDTH "Memory" "$memory_size"
+    fi
 
-                disk_list[NR, 0] = device_name;
-                disk_list[NR, 1] = device_size;
-                disk_list[NR, 2] = device_type;
-            }
-            END {
-                if (NR == 1) {
-                    printf "%-*s: Size = %s, Type = %s\n", width, disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2];
-                } else {
-                    for (i = 1; i <= NR; i++) {
-                        printf "%-*s: Size = %6s, Type = %s\n", width, disk_list[i, 0], disk_list[i, 1], disk_list[i, 2];
+    echo
+    echo "========  Disk  ========"
+    if [ "$PLATFORM" == "Linux" ]; then
+        if [ -n "$(which lsblk)" ]; then
+            lsblk -dn -o name,size,rota,type | grep "disk" | \
+                awk -v width=$WIDTH '{
+                    device_name = "/dev/"$1;
+                    device_size = $2;
+                    if ($3 == "0") {
+                        device_type = "SSD";
+                    } else {
+                        device_type = "HDD";
                     }
+
+                    disk_list[NR, 0] = device_name;
+                    disk_list[NR, 1] = device_size;
+                    disk_list[NR, 2] = device_type;
+                }
+                END {
+                    if (NR == 1) {
+                        printf "%-*s: Size = %s, Type = %s\n", width, disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2];
+                    } else {
+                        for (i = 1; i <= NR; i++) {
+                            printf "%-*s: Size = %6s, Type = %s\n", width, disk_list[i, 0], disk_list[i, 1], disk_list[i, 2];
+                        }
+                    }
+                }'
+        fi
+    elif [ "$PLATFORM" == "Darwin" ]; then
+        disk_list=$(diskutil list physical | grep "/dev" | awk '{print $1}' | xargs)
+        for disk in ${disk_list[@]}; do
+            diskutil info "$disk" | grep "Disk Size" | \
+                awk -v width=$WIDTH -v disk=$disk '{
+                    printf "%-*s: Size = %s %s\n", width, disk, $3, $4
+                }'
+        done
+    fi
+}
+
+print_sw() {
+    echo
+    echo "========   SW   ========"
+
+    if [ "$PLATFORM" == "Linux" ]; then
+        if [ -e /etc/os-release ]; then
+            cat /etc/os-release | grep "PRETTY_NAME" | \
+                awk -v width=$WIDTH -F "=" '{
+                    os_name = $2;
+                    gsub(/^"|"$/, "", os_name);
+                    printf "%-*s: %s\n", width, "OS name", os_name;
+                }'
+        fi
+    elif [ "$PLATFORM" == "Darwin" ]; then
+        if [ -n "$(which sw_vers)" ]; then
+            printf "%-*s: %s %s\n" $WIDTH "OS name" "$(sw_vers -productName)" "$(sw_vers -productVersion)"
+        fi
+    fi
+
+    if [ -n "$(which uname)" ]; then
+        printf "%-*s: %s\n" $WIDTH "Kernel version" "$(uname -sr)"
+    fi
+
+    if [ -n "$(which python3)" ]; then
+        echo
+        printf "%-*s: %s\n" $WIDTH "Python version" "$(python3 --version)"
+    fi
+
+    if [ -n "$(which pip3)" ]; then
+        pip3 list | grep "torch " | \
+            awk -v width=$WIDTH '{
+                printf "%-*s: PyTorch %s\n", width, "PyTorch version", $2
+            }'
+    fi
+
+    local cuda_version_file="/usr/local/cuda/version.json"
+    if [ -e "$cuda_version_file" ]; then
+        cat $cuda_version_file | grep -A 1 "CUDA SDK" | \
+            awk -v width=$WIDTH '{
+                if (NR == 2) {
+                    version = $3;
+                    gsub(/^"|"$/, "", version);
+                    printf "%-*s: CUDA %s\n", width, "CUDA version", version;
                 }
             }'
     fi
-elif [ "$platform" == "Darwin" ]; then
-    disk_list=$(diskutil list physical | grep "/dev" | awk '{print $1}' | xargs)
-    for disk in ${disk_list[@]}; do
-        diskutil info "$disk" | grep "Disk Size" | \
-            awk -v width=$WIDTH -v disk=$disk '{
-                printf "%-*s: Size = %s %s\n", width, disk, $3, $4
-            }'
+}
+
+start=$(date +%s)
+hwstats=0
+swstats=0
+print_time=1
+
+if [ $# -eq 0 ]; then
+    hwstats=1
+    swstats=1
+elif [ $# -eq 1 -a $1 == '-n' ]; then
+    hwstats=1
+    swstats=1
+    print_time=0
+else
+    while [[ $# -ne 0 ]]; do
+        case "$1" in
+        -h | --help)
+            print_help
+            exit
+            ;;  
+        --hw)
+            hwstats=1
+            shift
+            ;;
+        --sw)
+            swstats=1
+            shift
+            ;;
+        -n)
+            print_time=0
+            shift
+            ;;
+        *)
+            echo "Unknown options: $1"
+            exit
+            ;;
+        esac
     done
 fi
 
-echo
-echo "========   SW   ========"
-
-if [ "$platform" == "Linux" ]; then
-    if [ -e /etc/os-release ]; then
-        cat /etc/os-release | grep "PRETTY_NAME" | \
-            awk -v width=$WIDTH -F "=" '{
-                os_name = $2;
-                gsub(/^"|"$/, "", os_name);
-                printf "%-*s: %s\n", width, "OS name", os_name;
-            }'
-    fi
-elif [ "$platform" == "Darwin" ]; then
-    if [ -n "$(which sw_vers)" ]; then
-        printf "%-*s: %s %s\n" $WIDTH "OS name" "$(sw_vers -productName)" "$(sw_vers -productVersion)"
-    fi
+echo "Testbed"
+if [ $hwstats == 1 ]; then
+    print_hw
+fi
+if [ $swstats == 1 ]; then
+    print_sw
 fi
 
-if [ -n "$(which uname)" ]; then
-    printf "%-*s: %s\n" $WIDTH "Kernel version" "$(uname -sr)"
-fi
-
-if [ -n "$(which python3)" ]; then
-    printf "%-*s: %s\n" $WIDTH "Python version" "$(python3 --version)"
-fi
-
-if [ -n "$(which pip3)" ]; then
-    pip3 list | grep "torch " | \
-        awk -v width=$WIDTH '{
-            printf "%-*s: PyTorch %s\n", width, "PyTorch version", $2
-        }'
-fi
-
-cuda_version_file="/usr/local/cuda/version.json"
-if [ -e "$cuda_version_file" ]; then
-    cat $cuda_version_file | grep -A 1 "CUDA SDK" | \
-        awk -v width=$WIDTH '{
-            if (NR == 2) {
-                version = $3;
-                gsub(/^"|"$/, "", version);
-                printf "%-*s: CUDA %s\n", width, "CUDA version", version;
-            }
-        }'
+if [ $print_time == 1 ]; then 
+    end=$(date +%s)
+    echo
+    echo "Elasped time: $((end - start)) s"
 fi
