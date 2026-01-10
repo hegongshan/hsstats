@@ -1,6 +1,6 @@
 #!/bin/bash
 
-WIDTH=19
+WIDTH=21
 PLATFORM=$(uname)
 
 print_help() {
@@ -120,9 +120,20 @@ print_sw() {
     fi
 
     if [ -n "$(which pip3)" ]; then
-        pip3 list | grep "torch " | \
+        pip3 list | grep -E "scikit-learn|torch |tensorflow-cpu|tensorflow |nvidia-nccl" | \
             awk -v width=$WIDTH '{
-                printf "%-*s: PyTorch %s\n", width, "PyTorch version", $2
+                package_name = $1;
+                version = $2;
+                if (package_name == "scikit-learn") {
+                    formal_name = "scikit-learn";
+                } else if (package_name == "torch") {
+                    formal_name = "PyTorch";
+                } else if (package_name == "tensorflow-cpu" || package_name == "tensorflow") {
+                    formal_name = "TensorFlow";
+                } else {
+                    formal_name = "NCCL";
+                }
+                printf "%-*s: %s %s\n", width, formal_name" version", formal_name, version
             }'
     fi
 
