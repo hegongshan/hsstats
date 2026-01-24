@@ -1,7 +1,12 @@
 #!/bin/bash
 
-WIDTH=21
 PLATFORM=$(uname)
+
+hw_keys=()
+hw_values=()
+
+sw_keys=()
+sw_values=()
 
 print_help() {
     echo "Usage:"
@@ -12,52 +17,104 @@ print_help() {
     echo "    -n            Do not print time"
 }
 
-print_hw() {
+print_line() {
+    local count=$1
+    local delimiter=$2
+    echo -n "+"
+    for ((i = 0; i < count; i++)); do
+        echo -n "$delimiter"
+    done
+    echo -n "+"
     echo
-    echo "========  GPU  ========="
-    if [ -n "$(which nvidia-smi)" ]; then 
-        nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | \
-            awk -v width=$WIDTH -F ", " '{
-                printf "%-*s: %s\n", width, $1, $2
-            }'
+}
+
+formatted_size() {
+    local size=$1
+
+    local unit=${2:-g}
+    local base=
+    local unit_str=
+    if [ "$unit" == 'k' ]; then
+        base=1024
+        unit_str="KB"
+    elif [ "$unit" == 'm' ]; then
+        base=$((1024 * 1024))
+        unit_str="MB"
+    elif [ "$unit" == 'g' ]; then
+        base=$((1024 * 1024 * 1024))
+        unit_str="GB"
     fi
 
-    echo
-    echo "========  CPU  ========="
+    local formatted_size=
+    if [ -n "$(which bc)" ]; then
+        formatted_size=$(echo "scale=1; ${size} / ${base}" | bc)
+    else
+        formatted_size=$((size  / ${base}))
+    fi
+    echo "${formatted_size} ${unit_str}"
+}
+
+hwstats() {
+    hw_keys+=("")
+    hw_values+=("GPU")
+    if [ -n "$(which nvidia-smi)" ]; then 
+        local output=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | awk -F ", " '{printf "%s:%s\n", $1, $2}')
+        while IFS=':' read gpu_name gpu_memory; do
+            hw_keys+=("$gpu_name")
+            hw_values+=("$gpu_memory")
+        done <<< "$output"
+    else
+        hw_keys+=("GPU")
+        hw_values+=("Not available")
+    fi
+
+    hw_keys+=("")
+    hw_values+=("CPU")
     if [ "$PLATFORM" == "Linux" ]; then
         if [ -n "$(which lscpu)" ]; then
-            lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
-                awk -v width=$WIDTH -F ":" '{
+            local output=$(lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)" | \
+                awk -F ":" '{
                     value = $2;
                     gsub(/^[[:space:]]+|[[:space:]]+$/, "", value);
-                    printf "%-*s: %s\n", width, $1, value;
-                }'
+                    printf "%s:%s\n", $1, value;
+                }')
+            while IFS=':' read name value; do
+                hw_keys+=("$name")
+                hw_values+=("$value")
+            done <<< "$output"
         fi
     elif [ "$PLATFORM" == "Darwin" ]; then
-        cpu_name=$(sysctl -n machdep.cpu.brand_string)
-        cpu_core=$(sysctl -n hw.physicalcpu)
-        printf "%-*s: %s\n" $WIDTH "Model name" "$cpu_name"
-        printf "%-*s: %s\n" $WIDTH "Core(s)" "$cpu_core"
+        local cpu_name=$(sysctl -n machdep.cpu.brand_string)
+        local cpu_core=$(sysctl -n hw.physicalcpu)
+
+        local key=("Model name" "Core(s)")
+        local value=("$cpu_name" "$cpu_core")
+
+        hw_keys+=("${key[@]}")
+        hw_values+=("${value[@]}")
     fi
 
-    echo
-    echo "======== Memory ========"
+    hw_keys+=("")
+    hw_values+=("Memory")
+    hw_keys+=("Memory size")
+    local formatted_memory_size=
     if [ "$PLATFORM" == "Linux" ]; then
-        cat /proc/meminfo | grep "MemTotal" | \
-            awk -v width=$WIDTH  -F ": +" '{
-                printf "%-*s: %s\n", width, "Memory", $2
-            }'
+        # KB
+        local memory_size=$(cat /proc/meminfo | grep "MemTotal" | awk -F ": +" '{print $2}')
+        formatted_memory_size=$(formatted_size $($memory_size * 1024) "g")
     elif [ "$PLATFORM" == "Darwin" ]; then
-        memory_size=$(sysctl -n hw.memsize)
-        printf "%-*s: %s B\n" $WIDTH "Memory" "$memory_size"
+        # B
+        local memory_size=$(sysctl -n hw.memsize)
+        formatted_memory_size=$(formatted_size ${memory_size} "g")
     fi
+    hw_values+=("$formatted_memory_size")
 
-    echo
-    echo "========  Disk  ========"
+    hw_keys+=("")
+    hw_values+=("Disk")
     if [ "$PLATFORM" == "Linux" ]; then
         if [ -n "$(which lsblk)" ]; then
-            lsblk -dn -o name,size,rota,type | grep "disk" | \
-                awk -v width=$WIDTH '{
+            local output=$(lsblk -dn -o name,size,rota,type | grep "disk" | \
+                awk '{
                     device_name = "/dev/"$1;
                     device_size = $2;
                     if ($3 == "0") {
@@ -72,56 +129,62 @@ print_hw() {
                 }
                 END {
                     if (NR == 1) {
-                        printf "%-*s: Size = %s, Type = %s\n", width, disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2];
+                        printf "%s:%s:%s\n", disk_list[NR, 0], disk_list[NR, 1], disk_list[NR, 2]
                     } else {
                         for (i = 1; i <= NR; i++) {
-                            printf "%-*s: Size = %6s, Type = %s\n", width, disk_list[i, 0], disk_list[i, 1], disk_list[i, 2];
+                            printf "%s:%6s:%s\n", disk_list[i, 0], disk_list[i, 1], disk_list[i, 2]
                         }
                     }
-                }'
+                }')
+            while IFS=':' read device_name device_size device_type; do
+                hw_keys+=("$device_name")
+                hw_values+=("Size = $device_size, Type = $device_type")
+            done <<< "$output"
         fi
     elif [ "$PLATFORM" == "Darwin" ]; then
-        disk_list=$(diskutil list physical | grep "/dev" | awk '{print $1}' | xargs)
+        local disk_list=$(diskutil list physical | grep "/dev" | awk '{print $1}' | xargs)
         for disk in ${disk_list[@]}; do
-            diskutil info "$disk" | grep "Disk Size" | \
-                awk -v width=$WIDTH -v disk=$disk '{
-                    printf "%-*s: Size = %s %s\n", width, disk, $3, $4
-                }'
+            local disk_size=$(diskutil info "$disk" | grep "Disk Size" | awk '{print $3, $4}')
+            hw_keys+=("$disk")
+            hw_values+=("Size = $disk_size")
         done
     fi
 }
 
-print_sw() {
-    echo
-    echo "========   SW   ========"
-
+swstats() {
     if [ "$PLATFORM" == "Linux" ]; then
         if [ -e /etc/os-release ]; then
-            cat /etc/os-release | grep "PRETTY_NAME" | \
-                awk -v width=$WIDTH -F "=" '{
+            local os_name=$(cat /etc/os-release | grep "PRETTY_NAME" | \
+                awk -F "=" '{
                     os_name = $2;
                     gsub(/^"|"$/, "", os_name);
-                    printf "%-*s: %s\n", width, "OS name", os_name;
-                }'
+                    print os_name
+                }')
+            sw_keys+=("OS name")
+            sw_values+=("$os_name")
         fi
     elif [ "$PLATFORM" == "Darwin" ]; then
         if [ -n "$(which sw_vers)" ]; then
-            printf "%-*s: %s %s\n" $WIDTH "OS name" "$(sw_vers -productName)" "$(sw_vers -productVersion)"
+            sw_keys+=("OS name")
+            sw_values+=("$(sw_vers -productName) $(sw_vers -productVersion)")
         fi
     fi
 
     if [ -n "$(which uname)" ]; then
-        printf "%-*s: %s\n" $WIDTH "Kernel version" "$(uname -sr)"
+        sw_keys+=("Kernel version")
+        sw_values+=("$(uname -sr)")
     fi
 
+    sw_keys+=("")
+    sw_values+=("")
     if [ -n "$(which python3)" ]; then
-        echo
-        printf "%-*s: %s\n" $WIDTH "Python version" "$(python3 --version)"
+        sw_keys+=("Python version")
+        sw_values+=("$(python3 --version)")
     fi
 
     if [ -n "$(which pip3)" ]; then
-        pip3 list | grep -E "scikit-learn|torch |tensorflow-cpu|tensorflow |nvidia-nccl" | \
-            awk -v width=$WIDTH '{
+        local output=$(pip3 list | grep -E "scikit-learn|torch |tensorflow-cpu|tensorflow |nvidia-nccl" | \
+            awk '{
                 package_name = $1;
                 version = $2;
                 if (package_name == "scikit-learn") {
@@ -133,22 +196,32 @@ print_sw() {
                 } else {
                     formal_name = "NCCL";
                 }
-                printf "%-*s: %s %s\n", width, formal_name" version", formal_name, version
-            }'
+                printf "%s:%s:%s\n", formal_name, package_name, version
+            }')
+
+        while IFS=':' read formal_name package_name version; do
+            sw_keys+=("$formal_name version")
+            sw_values+=("$package_name $version")
+        done <<< "$output"
+                
     fi
 
     local cuda_version_file="/usr/local/cuda/version.json"
     if [ -e "$cuda_version_file" ]; then
-        cat $cuda_version_file | grep -A 1 "CUDA SDK" | \
-            awk -v width=$WIDTH '{
+        local cuda_version=$(cat $cuda_version_file | grep -A 1 "CUDA SDK" | \
+            awk '{
                 if (NR == 2) {
                     version = $3;
                     gsub(/^"|"$/, "", version);
-                    printf "%-*s: CUDA %s\n", width, "CUDA version", version;
+                    print version
                 }
-            }'
+            }')
+        sw_keys+=("CUDA version")
+        sw_values+=("CUDA $cuda_version")
     fi
 
+    sw_keys+=("")
+    sw_values+=("")
     if [ -n "$(which gcc)" ]; then
         local gcc_version=
         if [ "$PLATFORM" == "Linux" ]; then
@@ -157,39 +230,35 @@ print_sw() {
             gcc_version=$(gcc -dumpversion)
         fi
         if [ -n "$gcc_version" ]; then
-            echo
-            printf "%-*s: GCC %s\n" $WIDTH "GCC version" "$gcc_version"
+            sw_keys+=("GCC version")
+            sw_values+=("GCC $gcc_version")
         fi
     fi
 
     if [ -n "$(which make)" ]; then
-        make --version | awk -v width=$WIDTH '{
-            if (NR == 1) {
-                printf "%-*s: %s\n", width, "Make version", $0
-            }
-        }'
+        local make_version=$(make --version | awk '{if (NR == 1) print $0}')
+        sw_keys+=("Make version")
+        sw_values+=("$make_version")
     fi
 
     if [ -n "$(which cmake)" ]; then
-        cmake --version | awk -v width=$WIDTH '{
-            if (NR == 1) {
-                printf "%-*s: CMake %s\n", width, "CMake version", $3
-            }
-        }'  
+        local cmake_version=$(cmake --version | awk '{if (NR == 1) print $3}')
+        sw_keys+=("CMake version")
+        sw_values+=("CMake $cmake_version")
     fi
 }
 
 start=$(date +%s)
-hwstats=0
-swstats=0
+print_hw=0
+print_sw=0
 print_time=1
 
 if [ $# -eq 0 ]; then
-    hwstats=1
-    swstats=1
+    print_hw=1
+    print_sw=1
 elif [ $# -eq 1 -a $1 == '-n' ]; then
-    hwstats=1
-    swstats=1
+    print_hw=1
+    print_sw=1
     print_time=0
 else
     while [[ $# -ne 0 ]]; do
@@ -199,11 +268,11 @@ else
             exit
             ;;  
         --hw)
-            hwstats=1
+            print_hw=1
             shift
             ;;
         --sw)
-            swstats=1
+            print_sw=1
             shift
             ;;
         -n)
@@ -218,16 +287,99 @@ else
     done
 fi
 
-echo "Testbed"
-if [ $hwstats == 1 ]; then
-    print_hw
+key_max_len=0
+value_max_len=0
+if [ $print_hw == 1 ]; then
+    hwstats
+    for i in "${!hw_keys[@]}"; do
+        key="${hw_keys[$i]}"
+        if [ $key_max_len -lt ${#key} ]; then
+            key_max_len=${#key}
+        fi
+
+        value="${hw_values[$i]}"
+        if [ $value_max_len -lt ${#value} ]; then
+            value_max_len=${#value}
+        fi
+    done
 fi
-if [ $swstats == 1 ]; then
-    print_sw
+if [ $print_sw == 1 ]; then
+    swstats
+    for i in "${!sw_keys[@]}"; do
+        key="${sw_keys[$i]}"
+        if [ $key_max_len -lt ${#key} ]; then
+            key_max_len=${#key}
+        fi
+
+        value="${sw_values[$i]}"
+        if [ $value_max_len -lt ${#value} ]; then
+            value_max_len=${#value}
+        fi
+    done
+fi
+
+key_width=$((key_max_len + 1))
+
+terminal_width=$(stty size | awk '{print $2}')
+line_width=$((1 + key_width + 2 + value_max_len + 1))
+if [ $terminal_width -lt $line_width ]; then
+    line_width=$terminal_width
+fi
+
+
+calc_width() {
+    local text="$1"
+    local line_width=$2
+
+    local text_len=${#text}
+    local half_width=$(((line_width - text_len) / 2))
+    local left_width=$((half_width + text_len))
+    local right_width=$((line_width - half_width - text_len))
+    echo "$left_width $right_width"
+}
+
+echo "Testbed"
+echo
+if [ $print_hw == 1 ]; then
+    for i in "${!hw_keys[@]}"; do
+        if [ -z "${hw_keys[$i]}" ]; then
+            text="${hw_values[$i]}"
+            widths=($(calc_width "$text" $line_width))
+            left_width=${widths[0]}
+            right_width=${widths[1]}
+
+            print_line $line_width "-"
+            printf "|%*s%*s|\n" $left_width "$text" $right_width ""
+            print_line $line_width "-"
+        else
+            printf "| %-*s: %-*s |\n" $key_width "${hw_keys[$i]}" $value_max_len "${hw_values[$i]}"
+        fi
+    done
+    print_line $line_width "-"
+fi
+
+if [ $print_sw == 1 ]; then
+    text="SW"
+    widths=($(calc_width "$text" $line_width))
+    left_width=${widths[0]}
+    right_width=${widths[1]}
+
+    printf "|%*s%*s|\n" $left_width "$text" $right_width ""
+    print_line $line_width "-"
+    
+    for i in "${!sw_keys[@]}"; do
+        if [ -z "${sw_keys[$i]}" ]; then
+            print_line $line_width "-"
+        else
+            printf "| %-*s: %-*s |\n" $key_width "${sw_keys[$i]}" $value_max_len "${sw_values[$i]}"
+        fi
+    done
+
+    print_line $line_width "-"
 fi
 
 if [ $print_time == 1 ]; then 
     end=$(date +%s)
     echo
-    echo "Elasped time: $((end - start)) s"
+    printf "  %-*s: %s s\n" $key_width "Elasped time" "$((end - start))"
 fi
