@@ -152,6 +152,8 @@ hwstats() {
 }
 
 swstats() {
+    sw_keys+=("")
+    sw_values+=("")
     if [ "$PLATFORM" == "Linux" ]; then
         if [ -e /etc/os-release ]; then
             local os_name=$(cat /etc/os-release | grep "PRETTY_NAME" | \
@@ -340,7 +342,14 @@ calc_width() {
 
 echo "Testbed"
 echo
+
+# begin
+if [ $print_hw == 1 -o $print_sw == 1 ]; then
+    print_line $line_width "-"
+fi
+
 if [ $print_hw == 1 ]; then
+    is_first_line=1
     for i in "${!hw_keys[@]}"; do
         if [ -z "${hw_keys[$i]}" ]; then
             text="${hw_values[$i]}"
@@ -348,24 +357,32 @@ if [ $print_hw == 1 ]; then
             left_width=${widths[0]}
             right_width=${widths[1]}
 
-            print_line $line_width "-"
+            if [ $is_first_line == 1 ]; then
+                is_first_line=0
+            else
+                print_line $line_width "-"
+            fi
+
             printf "|%*s%*s|\n" $left_width "$text" $right_width ""
             print_line $line_width "-"
         else
             printf "| %-*s: %-*s |\n" $key_width "${hw_keys[$i]}" $value_max_len "${hw_values[$i]}"
         fi
     done
+fi
+
+# middle
+if [ $print_hw == 1 -a $print_sw == 1 ]; then
     print_line $line_width "-"
 fi
 
 if [ $print_sw == 1 ]; then
-    text="SW"
+    text="Software"
     widths=($(calc_width "$text" $line_width))
     left_width=${widths[0]}
     right_width=${widths[1]}
 
     printf "|%*s%*s|\n" $left_width "$text" $right_width ""
-    print_line $line_width "-"
     
     for i in "${!sw_keys[@]}"; do
         if [ -z "${sw_keys[$i]}" ]; then
@@ -374,7 +391,10 @@ if [ $print_sw == 1 ]; then
             printf "| %-*s: %-*s |\n" $key_width "${sw_keys[$i]}" $value_max_len "${sw_values[$i]}"
         fi
     done
+fi
 
+# end
+if [ $print_hw == 1 -o $print_sw == 1 ]; then
     print_line $line_width "-"
 fi
 
