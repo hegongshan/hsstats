@@ -110,14 +110,13 @@ hwstats() {
     hw_keys+=("Memory size")
     local formatted_memory_size=
     if [ "$PLATFORM" == "Linux" ]; then
-        # KB
-        local memory_size=$(cat /proc/meminfo | grep "MemTotal" | awk -F ": +" '{print $2}')
-        formatted_memory_size=$(formatted_size $($memory_size * 1024) "g")
+        local memory_blocks=$(ls -d /sys/devices/system/memory/memory* | wc -l)
+        local memory_block_size=$((0x$(cat /sys/devices/system/memory/block_size_bytes)))
+        local memory_size=$((memory_blocks * memory_block_size))
     elif [ "$PLATFORM" == "Darwin" ]; then
-        # B
         local memory_size=$(sysctl -n hw.memsize)
-        formatted_memory_size=$(formatted_size ${memory_size} "g")
     fi
+    formatted_memory_size=$(formatted_size $memory_size "g")
     hw_values+=("$formatted_memory_size")
 
     hw_keys+=("")
