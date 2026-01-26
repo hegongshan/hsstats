@@ -54,6 +54,17 @@ formatted_size() {
     echo "${formatted_size} ${unit_str}"
 }
 
+calc_width() {
+    local text="$1"
+    local line_width=$2
+
+    local text_len=${#text}
+    local half_width=$(((line_width - text_len) / 2))
+    local left_width=$((half_width + text_len))
+    local right_width=$((line_width - half_width - text_len))
+    echo "$left_width $right_width"
+}
+
 hwstats() {
     hw_keys+=("")
     hw_values+=("GPU")
@@ -327,18 +338,6 @@ line_width=$((1 + key_width + 2 + value_max_len + 1))
 if [ $terminal_width -lt $line_width ]; then
     line_width=$terminal_width
 fi
-
-
-calc_width() {
-    local text="$1"
-    local line_width=$2
-
-    local text_len=${#text}
-    local half_width=$(((line_width - text_len) / 2))
-    local left_width=$((half_width + text_len))
-    local right_width=$((line_width - half_width - text_len))
-    echo "$left_width $right_width"
-}
 
 echo "Testbed"
 echo
