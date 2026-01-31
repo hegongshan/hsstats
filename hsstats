@@ -32,8 +32,8 @@ formatted_size() {
     local size=$1
 
     local unit=${2:-g}
-    local base=
-    local unit_str=
+    local base=1
+    local unit_str='B'
     if [ "$unit" == 'k' ]; then
         base=1024
         unit_str="KB"
